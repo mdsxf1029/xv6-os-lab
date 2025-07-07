@@ -73,6 +73,7 @@ $ riscv64-linux-gnu-gcc --version
    ![](./assets/Lab%20Utilities/qemu1.png)
    ![](./assets/Lab%20Utilities/qemu2.png)
 6. 在 prompt 下输入 ls：
+   
     ![](./assets/Lab%20Utilities/ls.png)
     这些是 mkfs 在初始文件系统中包含的文件；大多数是可以运行的程序。输入 ls 就是运行了其中一个。
 
