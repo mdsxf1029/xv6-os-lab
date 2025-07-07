@@ -105,23 +105,36 @@ $ riscv64-linux-gnu-gcc --version
    - 调用系统调用 `sleep(ticks)`；
    - 程序结束前调用 `exit(0)` 正常退出。
 5. 代码如下：
-   ```c
-   #include "kernel/types.h"
-   #include "user/user.h"
+```c
+#include "kernel/types.h"
+#include "user/user.h"
 
-   int main(int argc, char *argv[]) 
-   {
-      if (argc < 2) {
-         fprintf(2, "Usage: sleep <ticks>\n");
-         exit(1);
-      }
+int main() 
+{
+    int p2c[2], c2p[2];
+    pipe(p2c);
+    pipe(c2p);
 
-      int ticks = atoi(argv[1]);
-      sleep(ticks);
-
-      exit(0);
-   }
-   ```
+    if (fork() == 0)
+    {
+        // child
+        char buf[1];
+        read(p2c[0], buf, 1);
+        printf("%d: received ping\n", getpid());
+        write(c2p[1], buf, 1);
+        exit(0);
+    }
+    else
+    {
+        // parent
+        char buf[1] = {'a'};
+        write(p2c[1], buf, 1);
+        read(c2p[0], buf, 1);
+        printf("%d: received pong\n", getpid());
+        exit(0);
+    }
+}
+```
 6. 打开 `Makefile`，找到 `UPROGS` 项；
    ![](./assets/Lab%20Utilities/makefile.png)
 7. 添加一行：
@@ -178,36 +191,36 @@ $ riscv64-linux-gnu-gcc --version
    - 子进程收到数据后打印 `"pid: received ping"`，再将数据写回父进程，随后退出。
    - 父进程收到子进程数据后打印 `"pid: received pong"`，然后退出。
 3. 代码如下：
-   ```c
-   #include "kernel/types.h"
-   #include "user/user.h"
+```c
+#include "kernel/types.h"
+#include "user/user.h"
 
-   int main() 
-   {
-      int p2c[2], c2p[2];
-      pipe(p2c);
-      pipe(c2p);
+int main() 
+{
+    int p2c[2], c2p[2];
+    pipe(p2c);
+    pipe(c2p);
 
-      if (fork() == 0)
-      {
-         // child
-         char buf[1];
-         read(p2c[0], buf, 1);
-         printf("%d: received ping\n", getpid());
-         write(c2p[1], buf, 1);
-         exit(0);
-      }
-      else
-      {
-         // parent
-         char buf[1] = {'a'};
-         write(p2c[1], buf, 1);
-         read(c2p[0], buf, 1);
-         printf("%d: received pong\n", getpid());
-         exit(0);
-      }
-   }
-   ```
+    if (fork() == 0)
+    {
+        // child
+        char buf[1];
+        read(p2c[0], buf, 1);
+        printf("%d: received ping\n", getpid());
+        write(c2p[1], buf, 1);
+        exit(0);
+    }
+    else
+    {
+        // parent
+        char buf[1] = {'a'};
+        write(p2c[1], buf, 1);
+        read(c2p[0], buf, 1);
+        printf("%d: received pong\n", getpid());
+        exit(0);
+    }
+}
+```
 4. 将程序添加到 Makefile
    在 xv6 根目录的 `Makefile` 中找到 `UPROGS` 项，添加：
    ```makefile
@@ -263,70 +276,69 @@ $ riscv64-linux-gnu-gcc --version
    - 每个进程都要在合适的时机 `close()` 不需要的管道端口；
    - 如果不关闭多余的管道，会导致资源泄漏或死循环。
 5. 代码如下：
-   ```c
-   #include "kernel/types.h"
-   #include "user/user.h"
+```c
+#include "kernel/types.h"
+#include "user/user.h"
 
-   void prime_filter(int p_read)
-   {
-	   int prime;
-	   int n;
+void prime_filter(int p_read)
+{
+	int prime;
+	int n;
 	
-	   if (read(p_read, &prime, sizeof(int)) == 0)
-	   {
-		   close(p_read);
-		   exit(0);
-	   }
+	if (read(p_read, &prime, sizeof(int)) == 0)
+	{
+		close(p_read);
+		exit(0);
+	}
 	
-	   printf("prime %d\n", prime);
+	printf("prime %d\n", prime);
 	
-	   int next[2];
-	   pipe(next);
+	int next[2];
+	pipe(next);
 	
-	   if (fork() == 0)
-	   {
-		   close(next[1]);
-		   close(p_read);
-		   prime_filter(next[0]);
-	   }
-	   else
-	   {
-		   close(next[0]);
-		   while (read(p_read, &n, sizeof(int)))
-		   {
-			   if (n % prime != 0)
-				   write(next[1], &n, sizeof(int));
-		   }
+	if (fork() == 0)
+	{
+		close(next[1]);
+		close(p_read);
+		prime_filter(next[0]);
+	}
+	else
+	{
+		close(next[0]);
+		while (read(p_read, &n, sizeof(int)))
+		{
+			if (n % prime != 0)
+				write(next[1], &n, sizeof(int));
+		}
 	
-		   close(p_read);
-		   close(next[1]);
-		   wait(0);
-		   exit(0);
-	   }
-   } 
+		close(p_read);
+		close(next[1]);
+		wait(0);
+		exit(0);
+	}
+} 
 
-   int main() 
-   {
-      int p[2];
-      pipe(p);
+int main() 
+{
+    int p[2];
+    pipe(p);
     
-      if (fork() == 0)
-      {
-         close(p[1]);
-    	   prime_filter(p[0]);
-	   }
-	   else
-	   {
-		   close(p[0]);
-		   for (int i = 2; i <= 35; i++)
-			   write(p[1], &i, sizeof(int));
-		   close(p[1]);
-		   wait(0);
-		   exit(0);
-	   }
-      exit(0);
-   }
-   ```
+    if (fork() == 0)
+    {
+    	close(p[1]);
+    	prime_filter(p[0]);
+	}
+	else
+	{
+		close(p[0]);
+		for (int i = 2; i <= 35; i++)
+			write(p[1], &i, sizeof(int));
+		close(p[1]);
+		wait(0);
+		exit(0);
+	}
+}
+```
 6. 在 `Makefile` 的 `UPROGS` 项中添加：
    ```makefile
    UPROGS = $U/_primes\
@@ -375,97 +387,88 @@ $ riscv64-linux-gnu-gcc --version
    - 如果是文件且名字与给定目标相同，则打印路径；
    - 如果是目录，则递归读取该目录下所有子项，跳过 `"."` 和 `".."`，递归调用 `find()` 继续查找。
 3. 代码如下：
-   ```c
-   #include "kernel/types.h"
-   #include "kernel/stat.h"
-   #include "user/user.h"
-   #include "kernel/fs.h"
+```c
+#include "kernel/types.h"
+#include "user/user.h"
+#include "kernel/param.h"
 
-   void find(char *path, char *target)
-   {
-	   char buf[512], *p;
-	   int fd;
-	   struct dirent de;
-	   struct stat st;
+int main(int argc, char *argv[])
+{
+	if (argc < 2)
+	{
+		fprintf(2, "Usage: xargs command [args...]\n");
+		exit(1);
+	}
 	
-	   // 打开路径 
-	   if ((fd = open(path, 0)) < 0)
-	   {
-		   fprintf(2, "find: cannot open %s\n", path);
-		   return;
-	   }
-	   // 获取路径状态
-	   if (fstat(fd, &st) < 0)
-   	{
-	   	fprintf(2, "find: cannot stat %s\n", path);
-   		close(fd);
-   		return; 
-   	} 
-   	// 如果是文件，判断名字是否匹配
-   	if (st.type != T_DIR)
-   	{
-	   	if (strcmp(path + strlen(path) - strlen(target), target) == 0)
-	   		printf("%s\n", path);
-	   	close(fd);
-	   	return;
-	   } 
-	   // 如果是目录，拼接路径，遍历子文件
-   	if (strlen(path) + 1 + DIRSIZ + 1 > sizeof(buf))
-   	{
-	   	printf("find: path too long\n");
-	   	close(fd);
-	   	return;
-   	} 
+	// 复制原始命令参数到 args 数组 
+	char *args[MAXARG];
+	int i;
+	for (i = 1; i< argc && i < MAXARG - 2; i++)
+		args[i - 1] = argv[i];
+		
+	char buf[512];
+	int n = 0;  // 当前读到的字符数 
 	
-	   strcpy(buf, path);      // 把当前路径复制到 buf
-	   p = buf + strlen(buf);  // p 是 buf 的尾部指针
-	   *p++ = '/';				// 在后面加一个 '/'，准备拼接子文件名
-	
-	   // 读取一个目录项 de 
-	   while (read(fd, &de, sizeof(de)) == sizeof(de))
-	   {
-		   // 空目录项 
-		   if (de.inum == 0)
-			   continue;
-		   // 当前目录和上一级目录，不进入递归 
-		   if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
-			   continue;
+	while (1)
+	{
+		char c;
+		int r = read(0, &c, 1);  // 从标准输入读取一个字符
+		// 发生了错误 
+		if (r < 0)
+		{
+			fprintf(2, "xargs: read error\n");
+			exit(1);
+		}
+		// 读到了文件末尾 
+		if (r == 0)
+		{
+			if (n > 0)
+			{
+				// 行末未处理，执行命令
+				buf[n] = 0;
+				args[i - 1] = buf;
+				args[i] = 0;
+				
+				if (fork() == 0)
+				{
+					exec(args[0], args);
+					fprintf(2, "xargs: exec failed\n");
+					exit(1);
+				} 
+				else
+					wait(0);
+			}
 			
-		   memmove(p, de.name, DIRSIZ);   // 文件名拼接到 buf，完整路径 
-		   p[DIRSIZ] = 0;                 // 加上字符串终止符 
-		
-		   if (stat(buf, &st) < 0)
-		   {
-			   printf("find: cannot stat %s\n", buf);
-			   continue;
-		   }
-		
-		   if (st.type == T_DIR)
-		   {
-			   find(buf, target);
-		   }
-		   else
-		   {
-			   if (strcmp(de.name, target) == 0)
-				   printf("%s\n", buf);
-		   }
-	   }	
+			break;
+		} 
+		// 处理换行符 
+		if (c == '\n')
+		{
+			buf[n] = 0;
+			args[i - 1] = buf;
+			args[i] = 0;
+			
+			if (fork() == 0)
+			{
+				exec(args[0], args);
+				fprintf(2, "xargs: exec failed\n");
+				exit(1);
+			}
+			else
+				wait(0);
+				
+			n = 0;  // 重新读取下一行 
+		}
+		else
+		{
+			if (n < sizeof(buf) - 1)
+			buf[n++] = c;
+		} 
+	} 
 	
-	   close(fd);
-   }
-
-   int main(int argc, char *argv[])
-   {
-	   if (argc != 3)
-	   {
-		   fprintf(2, "Usage: find <directory> <filename>\n");
-		   exit(1);
-	   }
-	
-	   find(argv[1], argv[2]);
-	   exit(0);
-   }
-   ```
+	exit(0);
+}
+```
 4. 在 `Makefile` 的 `UPROGS` 项中添加：
    ```makefile
    UPROGS = $U/_find\
@@ -531,9 +534,88 @@ $ riscv64-linux-gnu-gcc --version
    - `exec()` 参数需要以 `char* argv[]` 的形式组织，末尾加 NULL 结束；
    - 注意添加基本错误处理（如输入过长、fork 失败等）。
 4. 代码如下：
-   ```c
+```c
+#include "kernel/types.h"
+#include "user/user.h"
+#include "kernel/param.h"
 
-   ```
+int main(int argc, char *argv[])
+{
+	if (argc < 2)
+	{
+		fprintf(2, "Usage: xargs command [args...]\n");
+		exit(1);
+	}
+	
+	// 复制原始命令参数到 args 数组 
+	char *args[MAXARG];
+	int i;
+	for (i = 1; i< argc && i < MAXARG - 2; i++)
+		args[i - 1] = argv[i];
+		
+	char buf[512];
+	int n = 0;  // 当前读到的字符数 
+	
+	while (1)
+	{
+		char c;
+		int r = read(0, &c, 1);  // 从标准输入读取一个字符
+		// 发生了错误 
+		if (r < 0)
+		{
+			fprintf(2, "xargs: read error\n");
+			exit(1);
+		}
+		// 读到了文件末尾 
+		if (r == 0)
+		{
+			if (n > 0)
+			{
+				// 行末未处理，执行命令
+				buf[n] = 0;
+				args[i - 1] = buf;
+				args[i] = 0;
+				
+				if (fork() == 0)
+				{
+					exec(args[0], args);
+					fprintf(2, "xargs: exec failed\n");
+					exit(1);
+				} 
+				else
+					wait(0);
+			}
+			
+			break;
+		} 
+		// 处理换行符 
+		if (c == '\n')
+		{
+			buf[n] = 0;
+			args[i - 1] = buf;
+			args[i] = 0;
+			
+			if (fork() == 0)
+			{
+				exec(args[0], args);
+				fprintf(2, "xargs: exec failed\n");
+				exit(1);
+			}
+			else
+				wait(0);
+				
+			n = 0;  // 重新读取下一行 
+		}
+		else
+		{
+			if (n < sizeof(buf) - 1)
+			buf[n++] = c;
+		} 
+	} 
+	
+	exit(0);
+}
+```
 5. 在 `Makefile` 的 `UPROGS` 项中添加：
    ```makefile
    UPROGS = $U/_xargs\
