@@ -1,0 +1,5 @@
+Q: What does PTE_A mean?
+A: PTE_A 是页表项的访问位，用于记录该页是否被访问过。当访问该页时，硬件会设置这个位为1。
+
+Q: Why do we need to clear PTE_A after reading it in sys_pgaccess?
+A: 为了判断“是否在上次检查后被访问”，我们必须清除 PTE_A，这样下次调用 pgaccess 才能检测到新的访问。
