@@ -1,0 +1,29 @@
+Q1：Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+
+A1：RISC-V 调用约定规定，a0 ~ a7 寄存器用于传递函数参数。在 main 调用 printf(“%d”, 13) 时，13 被保存在寄存器 a1 中。
+
+Q2：Where is the call to function f in the assembly code for main? Where is the call to g?
+
+A2：函数 f 中调用了 g，但在 main 中并没有直接看到调用 f 和 g 的指令，因为编译器进行了内联优化，把 f 和 g 的计算逻辑直接展开在 main 中，省去了实际的函数调用指令。
+
+Q3：At what address is the function printf located?
+
+A3：在查看 call.asm 文件中可知，printf 函数位于地址 0x630。
+
+Q4：What value is in the register ra just after the jalr to printf in main?
+
+A4：调用 printf 前，先执行了 `auipc ra, 0x0` 和 `jalr 1536(ra)`，所以 ra（返回地址）保存的是 jalr 执行后下一条指令的地址，也就是 0x38。
+
+Q5：Run the following code. What is the output? The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+    unsigned int i = 0x00646c72;
+    printf("H%x Wo%s", 57616, &i);
+
+A5：输出为：He110 World。
+解释：57616 的十六进制是 e110，因此 `%x` 打印为 e110；由于 RISC-V 是小端序，i 的内容会以字节反向顺序读取成 "rld"，因此打印出 "World"。若为大端序，则需要将 i 设置为 0x00726c64 才能打印出 "World"。57616 不需更改。
+
+Q6：In the following code, what is going to be printed after 'y='? Why does this happen?
+
+    printf("x=%d y=%d", 3);
+
+A6：'y=' 后会打印一个不可预知的垃圾值。因为 printf 需要两个参数（x 和 y），但这里只提供了一个参数 3，第二个参数未初始化，printf 会从 a1/a2 等寄存器中错误读取随机值作为 y 的值。
