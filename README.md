@@ -1236,12 +1236,13 @@ freeproc(struct proc *p)
          ![](./assets/Lab%20Traps/q1.png)
      - 查看 `call.asm` 文件中的 `main` 函数可知，在 `main` 调用 `printf` 时，由寄存器 `a2` 保存 13。
    - Q2：Where is the call to function `f` in the assembly code for main? Where is the call to `g`? (Hint: the compiler may inline functions.)
-     - 查看 `call.asm` 文件中的 `f` 和 `g` 函数可知，函数 `f` 调用函数 `g`；函数 · 使传入的参数加 3 后返回。
+     - 查看 `call.asm` 文件中的 `f` 和 `g` 函数可知，函数 `f` 调用函数 `g`；函数 `g` 使传入的参数加 3 后返回。
          ![](./assets/Lab%20Traps/f.png)
      - 此外，编译器会进行内联优化，即一些编译时可以计算的数据会在编译时得出结果，而不是进行函数调用。查看 `main` 函数可以发现，`printf` 中包含了一个对 f 的调用。但是对应的会汇编代码却是直接将 f(8)+1 替换为 12 。
          ![](./assets/Lab%20Traps/inline.png)
    - Q3：At what address is the function `printf` located?
      - 查阅得到其地址在 `0x630`。
+  
          ![](./assets/Lab%20Traps/q3.png)
    - Q4：What value is in the register `ra` just after the `jalr` to `printf` in `main`?
      - 30：使用 `auipc ra,0x0` 将当前程序计数器 `pc` 的值存入 `ra` 中。
@@ -1287,32 +1288,183 @@ freeproc(struct proc *p)
 #### 实验目的
 实现一个回溯（`backtrace`）功能，用于在操作系统内核发生错误时，输出调用堆栈上的函数调用列表。这有助于调试和定位错误发生的位置。
 #### 实验步骤
-1. 
-
+1. 在 `kernel/defs.h` 中添加 `backtrace` 函数的原型 `void backtrace(void);`，以便在 `sys_sleep` 中调用该函数。
+2. GCC 编译器将当前正在执行的函数的帧指针（frame pointer）存储到寄存器 `s0` 中。在 `kernel/riscv.h` 中添加以下代码。
+   ```c
+   static inline uint64
+   r_fp()
+   {
+	   uint64 x;
+	   asm volatile("mv %0, s0" : "=r" (x));
+	   return x;
+   }
+   ```
+   - 在 `backtrace` 中调用此函数，将会读取当前帧指针。`r_fp()` 使用内联汇编读取 `s0`。
+   - 提示：遍历栈帧需要一个停止条件。有用的信息是：每个内核栈由一整个页（4k）组成，所有的栈帧都在同一个页上面。你可以使用 `PGROUNDDOWN(fp)` 来定位帧指针所在的页面，从而确定循环停止的条件。
+   - `PGROUNDDOWN(fp)` 总是表示 `fp` 所在的这一页的起始位置。
+3. 在 `kernel/printf.c` 中实现 `backtrace()`
+   ```c
+   void
+   backtrace(void)
+   {
+      uint64 fp = r_fp();
+      printf("backtrace:\n");
+  
+      while (fp != PGROUNDDOWN(fp))
+      {
+         uint64 ra = *((uint64 *)(fp - 8));
+         printf("%p\n", ra);
+  	
+         fp = *((uint64 *)(fp - 16));
+      }
+   }
+   ```
+4. 在 `kernel/defs.h` 添加声明
+   ```c
+   void backtrace(void);
+   ```
+5. 在 `kernel/sysproc.c` 中的 `sys_sleep()` 中调用 `backtrace()`
+   ```c
+   backtrace();
+   ```
+   - 这样每次 `sleep()` 被调用时都会触发一次调用链打印。
+6. 运行 `bttest` 测试程序，该程序会调用 `sys_sleep`，会看到 `backtrace` 函数输出的结果，显示一系列的地址。
+   ![](./assets/Lab%20Traps/bttest.png)
+7. 使用 `addr2line` 工具将这些地址转换为函数名和文件行号，以确定错误发生的位置：
+   - 运行 `bttest` 之后退出 qemu。在终端中：地址可能略有不同，但如果运行 `addr2line -e kernel/kernel`（或 `riscv64-unknown-elf-addr2line -e kernel/kernel`）并剪切粘贴上述地址，则会得到如下所示的结果：
+      ![](./assets/Lab%20Traps/line.png)
+8. 将 `backtrace()` 集成到 `kernel/printf.c` 中的 `panic()`，这样在内核发生 panic 时，你就能看到内核的回溯信息。
 #### 实验中遇到的问题和解决方法
+1. 循环终止条件： 在 `backtrace` 函数中，我需要遍历整个调用堆栈，但是起初我不清楚这个循环需要一个什么样的终止条件。后来通过学习我发现，使用 `PGROUNDDOWN` 和 `PGROUNDUP` 宏可以帮助我计算栈页的顶部和底部地址，从而确定循环终止的条件。
+#### 实验心得
+在完成这个实验过程中，我学到了关于调用堆栈和帧指针的重要概念。通过实现和理解 `backtrace` 函数，我深入了解了在程序执行过程中函数调用和返回的机制。
+首先，我意识到帧指针在调用堆栈中的作用是关键。帧指针是一个在每个堆栈帧中保存调用者帧指针的位置，它帮助我们在调用链中向上移动。通过正确使用帧指针，我能够遍历每个堆栈帧并访问其中保存的返回地址，从而实现了回溯功能。
+其次，理解返回地址与帧指针的相对位置是非常重要的。根据 RISC-V 的调用约定，返回地址相对于帧指针有固定的偏移。通过查看课堂笔记，我能够准确计算和访问这些地址，确保了输出的正确性。
+另外，解决循环终止条件的问题是实验中的一个关键点。使用 `PGROUNDDOWN` 和 `PGROUNDUP` 宏可以帮助我确定栈页的顶部和底部地址，进而确定循环何时终止。这个问题的解决让我更加自信地遍历调用堆栈。
 
 ---
 
 ### Alarm
 #### 实验目的
-
+本次实验将向 xv6 内核添加一个新的功能，即周期性地为进程设置定时提醒。这个功能类似于用户级的中断/异常处理程序，能够让进程在消耗一定的 CPU 时间后执行指定的函数，然后恢复执行。通过实现这个功能，我们可以为计算密集型进程限制 CPU 时间，或者为需要周期性执行某些操作的进程提供支持。
 #### 实验步骤
-1. 编译并运行程序
-   ```cmd
-   make qemu
-   ```
-2. 在 xv6 shell 中运行程序
-   ```bash
-   $ pgtbltest
-   ```
-   ![](./assets/Lab%20Page%20tables/access.png)
-#### 实验中遇到的问题和解决方法
+1. 添加用户接口定义
+   - 在 `user/user.h` 中添加：
+      ```c
+      int sigalarm(int ticks, void (*handler)());
+      int sigreturn(void);
+      ```
+   - 在 `user/usys.pl` 中添加：
+      ```c
+      entry("sigalarm");
+      entry("sigreturn");
+      ```
+   - 编译生成 `usys.S` 文件：
+      ```c
+      make clean
+      make
+      ```
+2. 添加内核系统调用框架
+   - 在 `kernel/syscall.h` 中添加 `syscall` 编号：
+      ```c
+      #define SYS_sigalarm 22
+      #define SYS_sigreturn 23
+      ```
+   - 在 `kernel/syscall.c` 的 `syscalls[]` 中添加：
+      ```c
+      extern uint64 sys_sigalarm(void);
+      extern uint64 sys_sigreturn(void);
 
+      [SYS_sigalarm]  sys_sigalarm,
+      [SYS_sigreturn] sys_sigreturn,
+      ```
+3. 在 `kernel/proc.h` 中为进程添加字段
+   ```c
+   int alarm_interval;
+   int alarm_ticks; 
+   uint64 handler;
+   int in_handler;
+
+   struct trapframe *alarm_trapframe_backup;
+   ```
+4. 在 `kernel/sysproc.c` 中实现 `sys_sigalarm()` 和 `sys_sigreturn()`
+   ```c
+   uint64
+   sys_sigalarm(void)
+   { 
+      int ticks;
+      uint64 handler;
+
+      if (argint(0, &ticks) < 0 || argaddr(1, &handler) < 0)
+         return -1;
+
+      struct proc *p = myproc();
+      p->alarm_interval = ticks;
+      p->handler = handler;
+      p->alarm_ticks = 0;
+      p->in_handler = 0;
+
+      return 0;
+   }
+
+   uint64
+   sys_sigreturn(void)
+   {
+      struct proc *p = myproc();
+
+      memmove(p->trapframe, p->alarm_trapframe_backup, sizeof(struct trapframe));
+      kfree((void *)p->alarm_trapframe_backup);
+      p->alarm_trapframe_backup = 0;
+      p->in_handler = 0;
+
+      return 0;
+   }
+   ```
+5. 在 `kernel/trap.c` 中的 `usertrap()` 中调用 `handler`
+   ```c
+   if (which_dev == 2) 
+   { 
+      if (p->alarm_interval > 0) 
+      {
+         p->alarm_ticks++;
+         if (p->alarm_ticks >= p->alarm_interval && !p->in_handler) 
+         {
+            p->in_handler = 1;
+            p->alarm_ticks = 0;
+
+            p->alarm_trapframe_backup = (struct trapframe *)kalloc();
+            if (p->alarm_trapframe_backup) 
+            {
+               memmove(p->alarm_trapframe_backup, p->trapframe, sizeof(struct trapframe));
+               p->trapframe->epc = p->handler;
+            }
+         }
+      }
+   }
+   ```
+6. 添加并编译 `alarmtest`
+   ```makefile
+   UPROGS = $U/_alarmtest\
+   ```
+7. 验证 test0 test1 test2：
+   ```bash
+   make qemu
+   $ alarmtest
+   ```
+   ![](./assets/Lab%20Traps/alarm.png)
+8. 测试 `usertests` 是否正常：
+   ![](./assets/Lab%20Traps/user.png)
+#### 实验中遇到的问题和解决方法
+1. 理解系统调用的机制： 首先我们需要确保对系统调用的处理流程和机制有清晰的理解，包括用户态和内核态之间的切换，参数传递等。起初我设置了 alarm 的内核操作，但是遗漏了对用户层面的声明和入口设置，导致程序运行出错，不过这也让我对两态的转换有了更好地理解。
+2. 处理函数调用和恢复： 在调用处理函数后，需要确保能够正确地恢复进程的执行状态，包括保存和恢复寄存器状态等。一开始我并没有注意到，中断的时候已经在 `proc->saved_trapframe` 中保存了中断帧信息，从而对于如何回复中断没有头绪。后来我才发现在中断发生时保存了中断帧，其中包含了被中断的用户态代码执行时的寄存器状态，因此我们需要将它恢复回 `proc->trapframe`。
 #### 实验心得
+通过本次实验，我对于定时中断的处理有了更深的理解。如果需要实现定时中断处理函数，这可能涉及到操作硬件定时器和设置中断处理程序，从而也加深了对中断处理机制的了解。
+此外这次实验也涉及到用户和管理两态的转换，我再次巩固了如何设置声明和入口使得二者连接。除此之外，通过这一次的测试程序，我还明白，在修改内核操作的时候，应当确保不影响系统稳定性，即在实现定时中断处理功能时，要确保不会影响系统的稳定性和正常运行，确保中断处理程序能够及时返回，避免影响其他中断和系统调度。进行这样充分的测试，我们才能确保定时中断处理不会导致系统崩溃或异常。
 
 ---
+
 ### Traps 分支测试样例通过结果
-![]()
+![](./assets/Lab%20Traps/grade.png)
 
 ---
 
