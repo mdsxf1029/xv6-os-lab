@@ -1,8 +1,8 @@
 #include "types.h"
 #include "riscv.h"
+#include "param.h"
 #include "defs.h"
 #include "date.h"
-#include "param.h"
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
@@ -46,6 +46,7 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
+  
   addr = myproc()->sz;
   if(growproc(n) < 0)
     return -1;
@@ -57,6 +58,8 @@ sys_sleep(void)
 {
   int n;
   uint ticks0;
+
+  backtrace();  
 
   if(argint(0, &n) < 0)
     return -1;
@@ -70,8 +73,46 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+
   return 0;
 }
+
+
+#ifdef LAB_PGTBL
+int
+sys_pgaccess(void)
+{
+  uint64 va;
+  int page_nums;
+  uint64 user_addr;
+  
+  if(argaddr(0, &va) < 0)
+    return -1; 
+  if(argint(1, &page_nums) < 0)
+    return -1;
+  if(argaddr(2, &user_addr) < 0)
+    return -1;
+    
+  uint64 mask = 0;
+  uint64 complement = ~PTE_A;  // ·ÃÎÊÎ»ÇåÁã 
+  
+  struct proc *p = myproc();
+  for(int i = 0; i < page_nums && i < 64; ++i)
+  {
+    pte_t *pte = walk(p->pagetable, va + i * PGSIZE, 0);
+    if (pte && (*pte & PTE_A))
+    {
+    	mask |= (1L << i);
+    	*pte &= complement;
+	}
+  }
+  
+  if(copyout(p->pagetable, user_addr, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+  
+  return 0;
+}
+#endif
 
 uint64
 sys_kill(void)
@@ -94,4 +135,35 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_sigalarm(void)
+{
+  int ticks;
+  uint64 handler;
+  
+  if (argint(0, &ticks) < 0 || argaddr(1, &handler) < 0)
+    return -1;
+  
+  struct proc *p = myproc();
+  p->alarm_interval = ticks;
+  p->handler = handler;
+  p->alarm_ticks = 0;
+  p->in_handler = 0;
+  
+  return 0;
+} 
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  
+  memmove(p->trapframe, p->alarm_trapframe_backup, sizeof(struct trapframe));
+  kfree((void *)p->alarm_trapframe_backup);
+  p->alarm_trapframe_backup = 0;
+  p->in_handler = 0;
+  
+  return 0;
 }
