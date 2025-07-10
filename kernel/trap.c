@@ -65,6 +65,10 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 13 || r_scause() == 15){
+  	uint64 fault_va = r_stval();
+  	if(fault_va >= p->sz || cowpage(p->pagetable, fault_va) != 0 || cowalloc(p->pagetable, PGROUNDDOWN(fault_va)) == 0)
+  	  p->killed = 1;
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
@@ -81,6 +85,63 @@ usertrap(void)
     yield();
 
   usertrapret();
+}
+
+int 
+cowpage(pagetable_t pagetable, uint64 va) 
+{
+  if(va >= MAXVA)
+    return -1;
+  pte_t* pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return -1;
+  if((*pte & PTE_V) == 0)
+    return -1;
+  return (*pte & PTE_F ? 0 : -1);	
+}
+
+void*
+cowalloc(pagetable_t pagetable, uint64 va)
+{
+	if(va % PGSIZE != 0)
+	  return 0;
+	
+	uint64 pa = walkaddr(pagetable, va);  // 获取对应的物理地址 
+	if(pa == 0)
+	  return 0;
+	  
+	pte_t* pte = walk(pagetable, va, 0);  // 获取对应的 PTE
+	
+	if(krefcnt((char*)pa) == 1)
+	{
+		// 若只剩一个进程对物理地址存在引用则修改对应 PTE 即可
+		*pte |= PTE_W;
+		*pte &= ~PTE_F;
+		return (void*)pa; 
+	} else {
+		// 多个进程引用需要分配新的页面并拷贝旧页面的内容
+		char* mem = kalloc();
+		if(mem == 0)
+		  return 0;
+		
+		// 复制旧页面内容到新页
+		memmove(mem, (char*)pa, PGSIZE);
+		
+		// 清除PTE_V，否则出现remap判定
+		*pte &= ~PTE_V;
+		
+		// 为新页面添加映射
+		if(mappages(pagetable, va, PGSIZE, (uint64)mem, (PTE_FLAGS(*pte) | PTE_W) & ~PTE_F) != 0) 
+		{
+			kfree(mem);
+			*pte |= PTE_V;
+			return 0;
+		}
+		
+		// 将原来的物理内存引用计数-1
+		kfree((char*) PGROUNDDOWN(pa));
+		return mem;
+	}
 }
 
 //
