@@ -1,9 +1,9 @@
 # xv6-Based Operating System Lab Report
 
-> 姓名：谢雨霏
-> 学号：2354264
-> 源代码：
-> 各实验详细代码可切换至不同 Branch 查看
+> 姓名：谢雨霏  
+> 学号：2354264  
+> 源代码：https://github.com/mdsxf1029/xv6-os-lab.git  
+> 各实验详细代码可切换至不同 Branch 查看  
 
 ## Tools
 
@@ -655,7 +655,7 @@ int main(int argc, char *argv[])
 				buf[n] = 0;
 				args[i - 1] = buf;
 				args[i] = 0;
-		
+	
 				if (fork() == 0)
 				{
 					exec(args[0], args);
@@ -665,7 +665,7 @@ int main(int argc, char *argv[])
 				else
 					wait(0);
 			}
-	
+
 			break;
 		} 
 		// 处理换行符 
@@ -674,7 +674,7 @@ int main(int argc, char *argv[])
 			buf[n] = 0;
 			args[i - 1] = buf;
 			args[i] = 0;
-	
+
 			if (fork() == 0)
 			{
 				exec(args[0], args);
@@ -683,7 +683,7 @@ int main(int argc, char *argv[])
 			}
 			else
 				wait(0);
-		
+	
 			n = 0;  // 重新读取下一行 
 		}
 		else
@@ -2039,13 +2039,17 @@ freerange(void *pa_start, void *pa_end)
 ---
 
 ### Cow 分支测试样例通过结果
+
 ![](./assets/Lab%20Copy%20on-write/grade.png)
 
 ---
 
 ## Lab Multithreading
+
 ### 实验概述
+
 这个 lab 主要由三部分组成：
+
 - 实现一个用户级线程的创建和切换
 - 使用 UNIX pthread 线程库实现一个线程安全的 Hash 表
 - 利用 UNIX 的锁和条件变量实现一个 barrier
@@ -2057,11 +2061,15 @@ freerange(void *pa_start, void *pa_end)
   ```
 
 ### Uthread: switching between threads
+
 #### 实验目的
+
 设计并实现一个用户级线程系统的上下文切换机制。补充完成一个用户级线程的创建和切换上下文的代码。需要创建线程、保存/恢复寄存器以在线程之间切换，并且确保解决方案通过测试。
 
 #### 实验步骤
+
 1. 在 `user/uthread.c` 的 `thread` 结构体中添加切换线程时需要保存的寄存器：
+
 ```c
 struct thread {
   uint64 ra;
@@ -2084,7 +2092,9 @@ struct thread {
   int        state;             /* FREE, RUNNING, RUNNABLE */
 };
 ```
+
 2. 借鉴 `kernel/swtch.S` 中在 xv6 进程调度时用来保存寄存器状态的汇编代码，将其复制到 `user/uthread_switch.s` 中：
+
 ```risc-v
 	.globl thread_switch
 thread_switch:
@@ -2121,7 +2131,9 @@ thread_switch:
 
 	ret    /* return to ra */
 ```
+
 3. 在 `user/uthread.c` 的 `thread_create` 函数中添加线程初始化所需的代码： 注：xv6 中栈是从高地址向低地址增长，故要将 `stack` 的高地址赋给线程的 `sp` 寄存器
+
 ```c
 void 
 thread_create(void (*func)())
@@ -2132,7 +2144,9 @@ thread_create(void (*func)())
   t->sp = (uint64)(t->stack + STACK_SIZE);
 }
 ```
+
 4. 在 `user/uthread.c` 的 `thread_schedule` 函数中添加线程切换调用：
+
 ```c
 void 
 thread_schedule(void)
@@ -2152,13 +2166,17 @@ thread_schedule(void)
     next_thread = 0;
 }
 ```
+
 5. 测试解决方案： 使用 `make qemu` 来运行 xv6，然后运行 `uthread` 程序，观察线程的输出。你可以通过单步调试、检查寄存器等方式来验证你的上下文切换是否正确。
-![](./assets/Lab%20Multithreading/grade1.png)
+   ![](./assets/Lab%20Multithreading/grade1.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 线程堆栈分配： 在创建线程时，需要为每个线程分配独立的堆栈空间。这里我查阅相关说明和源码，需要利用寄存器各自的功能特性，比如在 RISC-V 架构中，寄存器 ra 是返回地址寄存器（Return Address Register），它存储了函数调用后的返回地址。而寄存器 sp 则是栈指针寄存器（Stack Pointer Register），它存储了当前栈的顶部地址。因此在 struct 结构体中，我将这两个寄存器包含其中，并在创建线程的时候对其进行的分配。
 2. 调度器实现： 实现调度器时，应当确保线程切换的逻辑正确。我希望在调用 thread_switch 时传递正确的参数，但是传递参数时出现了错误，使得程序无法运行，后来我使用 riscv64-linux-gnu-gdb 进行单步调试来验证代码的正确性。设置断点、检查寄存器、单步执行汇编指令等帮助我更好地理解和调试代码。
 
 #### 实验心得
+
 首先我更好地理解了寄存器的功能特性。在创建线程时，正确分配线程的堆栈空间是关键。通过理解 RISC-V 架构中寄存器的功能特性，我能够选择适当的寄存器来存储必要的信息，比如函数指针和栈顶指针。这样，当线程被调度执行时，它能够正确跳转到函数起始位置，并且在自己的独立栈上执行，避免与其他线程的干扰。
 
 这个实验让我更深入地理解了线程的概念以及线程切换的底层实现机制。通过充分利用寄存器的特性和调试工具，我成功地解决了遇到的问题，并完成了实验任务。
@@ -2168,19 +2186,24 @@ thread_schedule(void)
 ### Using threads
 
 #### 实验目的
+
 本实验旨在通过使用线程和锁实现并行编程，以及在多线程环境下处理哈希表。学习如何使用线程库创建和管理线程，以及如何通过加锁来实现一个线程安全的哈希表，使用锁来保护共享资源，以确保多线程环境下的正确性和性能。
 
 #### 实验步骤
+
 1. 运行实验程序时，观察输出并理解性能和正确性问题。特别是，在多线程情况下，我们会注意到出现了缺少的键（missing keys）问题，即部分键没有被正确添加到哈希表中：我们可以发现，在单线程的情况下，没有出现 keys missing 的问题；在多线程的情况下，出现了 keys missing 的问题
-![](./assets/Lab%20Multithreading/ph.png)
+   ![](./assets/Lab%20Multithreading/ph.png)
 2. 为每个哈希桶加一个锁，减少线程间冲突的情况以提高运行速率。
+
 ```c
 struct {
   pthread_mutex_t lock;//互斥锁
   struct entry* tab;
 }lock_t[NBUCKET];
 ```
+
 3. 在 main 函数中添加初始化互斥锁和释放互斥锁的代码：
+
 ```c
 int
 main(int argc, char *argv[])
@@ -2198,7 +2221,9 @@ main(int argc, char *argv[])
     pthread_mutex_destroy(&lock_t[i].lock);
 }
 ```
+
 4. 发现当多个线程同时执行到 `insert()` 函数时会出现丢失更新问题（具体就是在向单链表插入时会多次修改表头指针导致某些 key 插入失败）。故我们需要在调用 `insert()` 函数前上锁。
+
 ```c
 static 
 void put(int key, int value)
@@ -2222,15 +2247,19 @@ void put(int key, int value)
   }
 }
 ```
+
 5. 在修改代码后，重新运行实验程序，验证在多线程情况下是否解决了缺少键的问题，重新测试之后可以发现，keys missing 在单线程和多线程下都为 0.
-![](./assets/Lab%20Multithreading/ph1.png)
+   ![](./assets/Lab%20Multithreading/ph1.png)
 6. 运行 `make grade` 命令来检查你的代码是否通过了测试。首先确保通过了 `ph_safe` 测试，然后尝试通过 `ph_fast` 测试来检查代码是否在多线程情况下获得了更好的性能（`ph_fast` 测试要求两个线程每秒的 `put` 操作数至少是一个线程的 1.25 倍。）
-![](./assets/Lab%20Multithreading/grade2.png)
+   ![](./assets/Lab%20Multithreading/grade2.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 死锁： 错误地使用锁可能会导致死锁，即所有线程都在等待锁，无法继续执行。确保在使用锁时遵循正确的获取和释放顺序，以避免死锁情况的发生。同时，在最后尽管已经释放了锁，但是创建了锁会占用一定的资源和内存，这影响了程序的性能，因此我又添加上了 `pthread_mutex_destroy` 来销毁锁，从而避免在程序中反复创建锁而没有销毁它们，导致最终耗尽系统的资源，使得其他程序或操作受到影响。
 2. 性能问题： 使用过多的锁可能会导致性能下降，因为锁可能会限制多线程并行执行的能力。我需要考虑如何在不影响正确性的前提下，尽量减少锁的使用，以提高多线程性能。在某些情况下，并发的 `put()` 在哈希表中读取或写入的内存没有重叠，因此不需要锁来相互保护。因此我可以通过为每个哈希桶添加独立的锁来改进代码，从而提升并行性和性能。这样做的关键是将锁的粒度缩小到最小的冲突范围，避免了不必要的锁竞争。
 
 #### 实验心得
+
 当我参与使用线程进行并行编程的实验时，我深刻地了解到了多线程编程的挑战和重要性。本次实验涉及了使用线程和锁来实现一个哈希表，并探索了在多线程环境下的表现。我明白了锁在多线程环境中的关键作用。使用锁可以确保在访问共享资源时的线程安全性，防止竞争条件和数据不一致的问题。我学会了如何使用 `pthread_mutex_t` 类型的锁，并且确保在使用锁时始终遵循正确的获取和释放顺序，以避免死锁情况的发生。此外，我还了解到在锁的创建和销毁方面需要注意性能问题，因为未销毁的锁可能会影响系统的资源和性能。
 其次，我在优化并发性能方面获得了一些见解。我意识到过多的锁可能会导致性能下降，因此需要在保证正确性的前提下尽量减少锁的使用。特别是，我学会了如何将锁的粒度缩小，以便最大程度地减少锁竞争，从而提高并行性和性能。我在实验中发现，为每个哈希桶添加独立的锁是一个有效的优化方法，可以显著提升多线程执行的效率。
 
@@ -2239,14 +2268,18 @@ void put(int key, int value)
 ### Barrier
 
 #### 实验目的
+
 本实验旨在通过实现一个线程屏障（barrier），即每个线程都要在 barrier 处等待，直到所有线程到达 barrier 之后才能继续运行，加深对多线程编程中同步和互斥机制的理解。在多线程应用中，线程屏障可以用来确保多个线程在达到某一点后都等待，直到所有其他参与的线程也达到该点。通过使用pthread条件变量，我们将学习如何实现线程屏障，解决竞争条件和同步问题。
 
 #### 实验步骤
+
 1. 实现 `barrier()` 函数：为了实现 barrier，需要用到 UNIX 提供的条件变量以及 `wait/broadcast` 机制。在 `barrier.c` 中的 barrier() 函数中添加逻辑，确保线程在达到屏障后等待其他线程。使用 `pthread_cond_wait()` 来等待条件满足，`pthread_cond_broadcast()` 来唤醒等待的线程。
+
 - 在这个函数中，`bstate.nthread` 表示当前已经达到屏障的线程数量。当一个线程进入屏障时，会将这个计数值加一，以记录达到屏障的线程数量。
 - 如果还有线程未达到屏障，这个线程就会调用 `pthread_cond_wait()` 来等待在条件变量 `barrier_cond` 上。在调用这个函数之前，线程会释放之前获取的锁 `barrier_mutex`，以允许其他线程在这个锁上等待。
 - 当最后一个线程到达屏障，`bstate.nthread` 的值会等于 `nthread`，就会进入 else 分支。在这里，首先重置 `bstate.nthread` 为 0，以便下一轮的屏障计数。然后，增加 `bstate.round` 表示进入了下一个屏障的轮次。最后，通过调用 `pthread_cond_broadcast()` 向所有在条件变量上等待的线程发出信号，表示可以继续执行。
 - 使用 `bstate.round` 来记录当前轮次，确保每次所有线程都达到屏障后增加轮次。避免在上一轮仍在使用 `bstate.nthread` 时，另一个线程增加了该值。
+
 ```c
 static void 
 barrier()
@@ -2268,10 +2301,13 @@ barrier()
   pthread_mutex_unlock(&bstate.barrier_mutex);
 }
 ```
+
 #### 实验中遇到的问题和解决方法
+
 1. 竞争条件问题： 由于多线程环境中存在竞争条件，所以需要使用互斥锁来保护共享资源的访问。在更新 `bstate.nthread` 等共享变量时，我发现这同样需要使用互斥锁进行保护，否则多个线程可能会同时修改变量的值，从而导致不确定的行为和错误的结果。
 
 #### 实验心得
+
 通过本次实验，我深入了解了多线程编程中的同步机制，特别是条件变量和互斥锁的使用。我学会了如何设计和实现屏障同步，以保证多个线程在特定点同步等待和唤醒，从而实现了程序的并发控制。这次实验不仅提高了我对多线程编程的理解，还让我熟悉了实际使用条件变量和互斥锁解决并发问题的过程。
 
 ---
@@ -2283,8 +2319,11 @@ barrier()
 ---
 
 ## Lab network driver
+
 ### 实验概述
+
 编写一个在 xv6 操作系统中用于网络接口卡（network interface card, NIC）的设备驱动程序。通过这个实验，你将学习如何初始化并操作一个虚拟的网络设备，以及如何处理网络通信，从而深入理解操作系统中设备驱动程序的工作原理。
+
 - 开始实验，切换到 `net` 分支：
   ```cmd
   $ git fetch
@@ -2293,11 +2332,15 @@ barrier()
   ```
 
 ### Your Job
+
 #### 实验目的
+
 您的任务是完成 `kernel/e1000.c` 中的 `e1000_transmit()` 和 `e1000_recv()` 函数，以便驱动程序可以进行数据包的传输和接收。当 `make grade` 命令显示您的解决方案通过了所有测试时，表示您已经完成了任务。
 
 #### 实验步骤
+
 1. 实现 `e1000_transmit()` 函数：
+
 ```c
 int
 e1000_transmit(struct mbuf *m)
@@ -2330,7 +2373,9 @@ e1000_transmit(struct mbuf *m)
   return 0;
 }
 ```
+
 2. 实现 `e1000_recv()` 函数：
+
 ```c
 static void
 e1000_recv(void)
@@ -2358,31 +2403,40 @@ e1000_recv(void)
   }
 }
 ```
+
 3. 在确保基本功能正常工作后，你可以考虑优化代码、添加注释以及确保代码的可靠性和稳定性。确保你的驱动程序通过了所有的测试，包括 `make grade` 命令执行的测试。
-  - E1000 驱动程序将发送数据包，qemu 将其传递到主机计算机：
+
+- E1000 驱动程序将发送数据包，qemu 将其传递到主机计算机：
   ![](./assets/Lab%20network%20driver/qemu.png)
-  - `make server` 将收到数据包，然后发送一个响应数据包。E1000 驱动程序和 `nettests` 将看到响应数据包。
+- `make server` 将收到数据包，然后发送一个响应数据包。E1000 驱动程序和 `nettests` 将看到响应数据包。
   ![](./assets/Lab%20network%20driver/server.png)
-  - `tcpdump -XXnr packets.pcap` 产生的输出结果包含字符串 "ARP, Request"、"ARP, Reply"、"UDP"、"a.message.from.xv6" 和 "this.is.the.host"。
+- `tcpdump -XXnr packets.pcap` 产生的输出结果包含字符串 "ARP, Request"、"ARP, Reply"、"UDP"、"a.message.from.xv6" 和 "this.is.the.host"。
   ![](./assets/Lab%20network%20driver/pa.png)
-  - `make grade` 测试：
+- `make grade` 测试：
   ![](./assets/Lab%20network%20driver/grade.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 寄存器配置错误： 在初始化和操作 E1000 设备时，寄存器的配置可能会出现问题。因此我会需要按照 E1000 软件开发手册中的指导，正确配置寄存器，以确保设备的正常工作。其中，为了实现驱动程序通过内存映射的控制寄存器与 E1000 交互，以检测接收到的数据包何时可用，并通知 E1000 驱动程序已在某些 TX 描述符中填入要发送的数据包，通过教程指导我了解到全局变量 regs 保存着指向 E1000 第一个控制寄存器的指针，因此我考虑驱动程序可以通过数组索引 regs 来访问其他寄存器，其中就可以使用 E1000_RDT 和 E1000_TDT 这两个索引。
 
 #### 实验心得
+
 通过这次实验，我深入了解了设备驱动程序的编写和调试过程，特别是在网络设备上的应用。我学会了如何初始化和操作虚拟网络设备，以及如何处理数据包的发送和接收。同时，我还学会了如何使用互斥锁和同步机制来保证多个进程或线程对设备的正确访问。但对于锁与性能之间更多的知识，希望可以在下一个关于 lock 的实验中有更深的理解，说不定可以解决我在这个实验中遇到的困惑。
 
 ---
 
 ### Net 分支测试样例通过结果
+
 ![](./assets/Lab%20network%20driver/grade.png)
 
 ---
 
 ## Lab Locks
+
 ### 实验概述
+
 在并发编程中我们经常用到锁来解决同步互斥问题，但是一个多核机器上对锁的使用不当会带来很多的所谓 “lock contention” 问题。本次实验的目标就是对涉及到锁的数据结构进行修改，从而降低对锁的竞争。
+
 - 开始实验，切换到 `lock` 分支：
   ```cmd
   $ git fetch
@@ -2391,25 +2445,33 @@ e1000_recv(void)
   ```
 
 ### Memory allocator
+
 #### 实验目的
+
 通过修改内存分配器的设计，以减少锁竞争，从而提高多核系统中的性能。具体来说，需要实现每个CPU都有一个独立的自由列表（free list），每个列表都有自己的锁。这样可以让不同CPU上的内存分配和释放操作可以并行进行，从而减少锁的争用。还需要实现当一个CPU的自由列表为空时，能够从其他CPU的自由列表中获取部分内存。
 将内存分配器的锁粒度从一个全局锁变为每个 CPU 一个锁（per-CPU lock），以减少多核情况下的锁竞争，提高并发性能。
 
 #### 实验步骤
+
 1. 在实验开始之前，运行 `kalloctest` 测试，通过测试结果来查看反映出的问题：
-![](./assets/Lab%20Lock/test.png)
+   ![](./assets/Lab%20Lock/test.png)
+
 - 具体地看 test1 的结果：
   - 锁 `kmem` 的测试中，有大量的 `#test-and-set` 和 `#acquire()` 操作，这意味着在尝试获取这个锁时，很多次需要重新尝试（test-and-set 是一种获取锁的方式，acquire 是另一种方式）。
   - 锁 `proc` 也有大量的 `#test-and-set` 和 `#acquire()` 操作，这也可能是导致问题的原因之一。
 - 从这个输出来看，问题主要集中在 `kmem` 和 `proc` 这两个锁上，出现了大量的锁竞争和争用情况。因此这会是我在实验中所要解决的问题：减少锁争用，提高内存分配器的性能。
+
 2. 为每个 cpu 都配一把锁，并维护一个空闲列表
+
 ```c
 struct {
   struct spinlock lock;
   struct run *freelist;
 } kmem[NCPU];
 ```
+
 3. 在 `kinit` 中为所有锁初始化：
+
 ```c
 void
 kinit()
@@ -2419,7 +2481,9 @@ kinit()
   freerange(end, (void*)PHYSTOP);
 }
 ```
+
 4. 在 `kalloc` 中判断当前 cpu 的空闲列表是否为空，若为空则需窃取其它 cpu 的空闲页：
+
 ```c
 void *
 kalloc(void)
@@ -2454,7 +2518,9 @@ kalloc(void)
   return (void*)r;
 }
 ```
+
 5. 释放物理内存页的时候只要将被释放页放入当前 cpu 的空闲列表即可，配合 kalloc 中的窃取操作我们可以暂时将该物理页交予当前 cpu 管理，进而减少了资源竞争。
+
 ```c
 void
 kfree(void *pa)
@@ -2478,23 +2544,31 @@ kfree(void *pa)
   pop_off();//开启中断
 }
 ```
+
 6. 运行 `kalloctest` 测试，查看锁的竞争情况是否减少，确认你的实现是否成功降低了锁的争用；运行 `usertests sbrkmuch` 测试，确保内存分配器仍然能够正确分配所有内存；运行 `usertests` 测试，确保所有的用户测试都通过。
-![](./assets/Lab%20Lock/test2.png)
-![](./assets/Lab%20Lock/test3.png)
+   ![](./assets/Lab%20Lock/test2.png)
+   ![](./assets/Lab%20Lock/test3.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 原子性问题：在实现过程中，需要确保每次获取锁和释放锁的顺序是一致的，避免出现循环等待的情况。除此之外，一开始我在读取 CPU 的 ID 时没有禁用中断，使得程序出错，这很有可能是多个核心同时访问共享资源而没有正确的同步机制，也许会导致竞争、数据损坏、不一致性或不可预测的结果。于是我查阅资料后，加上了 `push_off()` 和 `pop_off()` 来禁用和启用中断，这保证了我读取 CPU ID 的准确性和可靠性。
 
 #### 实验心得
+
 当我开始进行实验时，我对于操作系统内核的设计和锁竞争问题并没有太多的了解。然而，通过完成这个实验，我逐渐理解了操作系统内核的基本结构以及如何解决多核心环境下的锁竞争问题。在多核心环境下，锁的使用是解决并发访问问题的关键。在实验中，我学会了如何使用 `acquire` 和 `release` 函数来保护共享资源，以避免竞争条件和数据不一致问题。
 
 ---
 
 ### Buffer cache
+
 #### 实验目的
+
 优化 xv6 操作系统中的缓冲区缓存（buffer cache），减少多个进程之间对缓冲区缓存锁的争用，从而提高系统的性能和并发能力。通过设计和实现一种更加高效的缓冲区管理机制，使得不同进程可以更有效地使用和管理缓冲区，减少锁竞争和性能瓶颈。
 
 #### 实验步骤
+
 1. 在 Buffer cache 上产生大量竞争的关键原因是它使用的数据结构是一个双向循环链表，该链表被一把大锁保护，每当一个进程使用文件系统的时候都会获取该锁。为了减少竞争我们需要修改其数据结构，改用哈希桶来存储 buf，为了保留 LRU 功能，桶中元素使用双向循环链表进行链接，为了避免极端情况，我令每个桶中元素个数仍为 NBUF。
+
 ```c
 #define BKSIZE 13
 #define NBUFSIZE NBUF * BKSIZE
@@ -2504,7 +2578,9 @@ struct {
   struct buf buf[NBUFSIZE];
 } bcache;
 ```
+
 2. 修改 `binit` 对哈希桶进行初始化：
+
 ```c
 void
 binit(void)
@@ -2527,7 +2603,9 @@ binit(void)
   }
 }
 ```
+
 3. 在 `bget` 函数中只需多加个哈希函数寻找到指定的桶，其余逻辑与原版无异常： 注：这里使用 dev(设备号) + blockno(设备盘块号)作为 key。
+
 ```c
 static struct buf*
 bget(uint dev, uint blockno)
@@ -2564,7 +2642,9 @@ bget(uint dev, uint blockno)
   panic("bget: no buffers");
 }
 ```
+
 3. `brelse`、`bpin`、`bunpin` 也是只需通过哈希函数找对对应的桶即可。
+
 ```c
 void
 brelse(struct buf *b)
@@ -2607,16 +2687,23 @@ bunpin(struct buf *b) {
   release(&bcache.lock[idx]);
 }
 ```
+
 4. 运行修改后的 `bcachetest` 测试程序，观察锁竞争情况和测试结果。优化后，锁竞争应该大幅减少；运行 `usertests` 测试程序，确保修改不会影响其他部分的正常运行。
-![](./assets/Lab%20Lock/t1.png)
-![](./assets/Lab%20Lock/t2.png)
+   ![](./assets/Lab%20Lock/t1.png)
+   ![](./assets/Lab%20Lock/t2.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 做完上述工作启动 qemu，就会获得一个 `panic: findslot`，我们可以在 `kernel/spinlock.c`中找到该函数；我们可以发现该函数是用来分配锁的，分配的数量上限为 `NLOCK`，在该文件中可以找到其宏定义 `#define NLOCK 500`，可知xv6运行过程中最多可同时存在 `500` 把锁。`bcache` 中有 `NBUFSIZE` 个 buf，而每个 buf 都分配有一个 sleeplock，结合下述搜集到的宏定义我们可以发现光是 buf 就占有 390 把锁，这直接导致系统的锁不够用了。
+
 - 增加 `NLOCK` 到 1024 之后解决。
+
 2. `usertests` 测试时遇到 `panic: balloc: out of blocks`，后来我发现，这和 `kernel/param.h` 中的文件系统的大小（以块为单位计算）相关：
+
 - 增加 `FSSIZE` 到 10000 之后解决。
 
 #### 实验心得
+
 在开始实验之前，我深入理解了 Buffer Cache 的结构，包括缓存的大小、缓存块的管理方式以及数据结构等。这为我后续的编码和设计提供了重要的指导。
 
 实验要求的功能涵盖了从缓存的获取、写入到缓存的释放等多个方面。我将实验任务分成不同的阶段，逐步实现和测试每个功能。这样有助于确保每个功能都能够独立正常运行。
@@ -2628,13 +2715,17 @@ bunpin(struct buf *b) {
 ---
 
 ### Lock 分支测试样例通过结果
+
 ![](./assets/Lab%20Lock/grade.png)
 
 ---
 
 ## Lab File System
+
 ### 实验概述
+
 在本实验中，您将为 xv6 文件系统添加大文件和符号链接。
+
 - 开始实验，切换到 `fs` 分支：
   ```cmd
   $ git fetch
@@ -2643,18 +2734,24 @@ bunpin(struct buf *b) {
   ```
 
 ### Large files
+
 #### 实验目的
+
 本次实验的目的是扩展 xv6 文件系统，使其支持更大的文件大小。目前 xv6 文件大小受限于 268 个块，或 268 * BSIZE 字节（在 xv6 中，BSIZE 为 1024）。这个限制是因为 xv6 inode 包含 12 个“直接”块号和一个“单间接”块号，它引用一个可以容纳多达 256 个块号的块，总共为 12+256=268 个块。
 
 #### 实验步骤
+
 1. 在 `fs.h` 中添加双间接块对应的直接块总数宏定义，并修改文件最大大小的宏定义：
+
 ```c
 #define NDIRECT 12
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define DINDIRECT (NINDIRECT * NINDIRECT)  //双间接块对应的直接块总数
 #define MAXFILE (NDIRECT + NINDIRECT + DINDIRECT - 1)  //要减去被占用的直接块
 ```
+
 2. 在 `kernel/fs.c` 中修改 `bmap` 定义，添加用双间接块获取指定物理块号的代码：
+
 ```c
 static uint
 bmap(struct inode *ip, uint bn)
@@ -2737,7 +2834,9 @@ bmap(struct inode *ip, uint bn)
   panic("bmap: out of range");
 }
 ```
+
 3. 修改 `itrunc` 的定义以释放双间接块有关物理块，确保释放文件所有的块：
+
 ```c
 void
 itrunc(struct inode *ip)
@@ -2777,7 +2876,9 @@ itrunc(struct inode *ip)
   iupdate(ip);
 }
 ```
+
 4. 由于我们未修改 `NDIRECT` 的宏定义而是在逻辑上认为前 11 块为直接块，第 12 块为单间接块，第 13 块为双间接块，故我们要注意依赖 `NDIRECT` 的代码，确保它符合我们规定的逻辑，发现建立初始文件系统的 `mkfs/mkfs.c` 中的 `iappend` 函数中涉及 `NDIRECT`，我们要对其进行修改：
+
 ```c
 void
 iappend(uint inum, void *xp, int n)
@@ -2802,28 +2903,36 @@ iappend(uint inum, void *xp, int n)
   ...
 }
 ```
+
 5. 运行 `bigfile` 测试，确保它可以成功创建文件，并报告正确的文件大小。这个测试可能会花费一些时间。
-![](./assets/Lab%20File%20system/bf.png)
+   ![](./assets/Lab%20File%20system/bf.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. 要注意，不能只修改 `bmap` 函数，而是还需要同步修改 `itrunc()`，使得其在丢弃 `inode` 的时候回收所有的数据块。由于添加了二级间接块的结构，因此也需要添加对该部分的块的释放的代码。释放的方式同一级间接块号的结构，只需要两重循环去分别遍历二级间接块以及其中的一级间接块。
 
 #### 实验心得
+
 在本次实验中，我们成功地扩展了 xv6 文件的最大大小。初始的 xv6 文件系统限制了文件的最大大小为 268 个块，或者 268 BSIZE 字节（其中 BSIZE 在 xv6 中为 1024）。我通过实现双间接块的概念，成功将文件的最大大小扩展到了 65803 个块（或者 256*256+256+11 个块）。
 阅读并理解原始代码时，我最初的难点是理解 xv6 文件系统的数据结构，包括 inode 结构、块地址数组等。通过阅读代码注释、文档并且查阅相关资料，我逐步理解了这些概念。并且参照上面的inode结构图，准确修改了文件系统宏定义，且在 bmap 上实现顺序映射逻辑块号到磁盘块号，在 itrunc 上实现逆序地释放块。通过完成本次实验，我更加地深入理解了 xv6 文件系统的内部结构和工作原理。
 
 ---
 
 ### Symbolic links
+
 #### 实验目的
+
 本次实验的主要目的是在 xv6 操作系统中实现符号链接（软链接）的功能。符号链接是一种通过路径名来引用另一个文件的方式，与硬链接不同，符号链接可以跨越不同的磁盘设备。通过实现这个系统调用，我们将深入理解路径名查找的工作原理。
 
 #### 实验步骤
+
 1. 在 `user/user.h` 中为该系统调用添加用户态的声明 `int symlink(char *target, char *path);`
 2. 在 `user/usys.pl` 中为其添加一个脚本生成项 `entry("symlink")`
 3. 在 `kernel/syscall.h` 中为其添加一个宏定义 `#define SYS_symlink 22`
 4. 在 `kernel/syscall.c` 中的函数指针数组 syscalls 中添加一条 `[SYS_symlink] sys_symlink,`
 5. 为了让系统能区分出软链接 inode，需要先在 `kernel/stat.h` 添加一个新的文件类型宏定义 `#define T_SYMLINK 4 // symlink`
 6. 在 `kernel/sysfile.c` 中定义 `sys_symlink` 函数：
+
 ```c
 uint64 
 sys_symlink(void) 
@@ -2858,8 +2967,10 @@ sys_symlink(void)
   return 0;
 }
 ```
+
 7. 为了让 open 系统调用确定是要跟随软链接还是单纯打开软链接，我们要在 `kernel/fcntl.h` 中添加一个新的标志 `#define O_NOFOLLOW 0x004`
 8. 改 `kernel/sysfile.c` 中 `sys_open` 的定义，当 inode 类型为 `T_SYMLINK`，并且用户未设置 `O_NOFOLLOW` 标志时我们就可以跟踪该软链接，直至获取到文件。这里需要注意的是软链接可能会出现循环链接的情况，我们要限制循环查找次数
+
 ```c
 uint64
 sys_open(void)
@@ -2893,26 +3004,34 @@ sys_open(void)
   ...
 }
 ```
+
 9. 在 Makefile 中添加对测试文件 symlinktest.c 的编译
 10. 程序测试：
-![](./assets/Lab%20File%20system/link.png)
+    ![](./assets/Lab%20File%20system/link.png)
+
 #### 实验中遇到的问题和解决方法
+
 需要注意添加的函数之间的顺序，防止出现未声明先使用这样的错误。
 在处理符号链接时，需要通过适当的加锁和释放规则，确保对不同 inode 的正确操作和同步。还需要注意有隐性的一些条件，比如：在 `sys_open()` 中处理 symlink 的代码处，不用调用 `iunlockput()` 释放锁，因为 `follow_symlinktest()` 返回失败时,锁在函数内已经被释放。
 
 #### 实验心得
+
 在本次实验中，我成功地向 xv6 操作系统添加了符号链接（软链接）的支持。符号链接是一种特殊类型的文件，可以跨越磁盘设备引用其他文件。在这个实验中，我实现了 `symlink(char *target, char *path)` 系统调用，该调用可以创建一个新的符号链接文件，将其指向目标文件。此外，为了防止符号链接文件溯源的过程中陷入死循环，我们还额外考虑了循环的深度限制和成环检测，这提高了我们的效率，并且保障了程序的安全性。
 
 ---
 
 ### Fs 分支测试样例通过结果
+
 ![](./assets/Lab%20File%20system/grade.png)
 
 ---
 
 ## Lab mmap
+
 ### 实验概述
+
 本次实验旨在向 xv6 操作系统添加 `mmap` 和 `munmap` 系统调用，实现对进程地址空间的详细控制。通过实现这两个系统调用，我们可以实现内存映射文件的功能，包括共享内存、将文件映射到进程地址空间等。这有助于理解虚拟内存管理和页面错误处理的机制。
+
 - 开始实验，切换到 `mmap` 分支：
   ```cmd
   $ git fetch
@@ -2921,8 +3040,10 @@ sys_open(void)
   ```
 
 #### 实验步骤
+
 1. 在 Makefile 中添加 `$U/_mmaptest`
 2. 添加系统调用： 添加有关 `mmap` 和 `munmap` 系统调用的定义声明。包括：
+
 - `kernel/syscall.h`：
   ```c
   #define SYS_mmap   22 
@@ -2941,7 +3062,7 @@ sys_open(void)
   ```
 - `user/usys.pl`:
   ```c
-  entry("mmap");     
+  entry("mmap");   
   entry("munmap");   
   ```
 - `user/user.h`:
@@ -2949,7 +3070,9 @@ sys_open(void)
   void* mmap(void* addr, int length, int prot, int flags, int fd, int offset);
   int munmap(void* addr, int length);
   ```
+
 3. 定义 `vm_area` 结构体及其数组：
+
 - 在 `kernel/proc.h` 中定义 `struct VMA` 结构体。
   ```c
   struct VMA {
@@ -2970,8 +3093,10 @@ sys_open(void)
      struct VMA vma[16];
   };
   ```
+
 4. 定义权限和标志位：在 `kernel/fcntl.h` 中，已经定义了 `PROT_READ` 和 `PROT_WRITE` 权限。你需要为 `mmap` 系统调用实现 `MAP_SHARED` 和 `MAP_PRIVATE` 标志位。
 5. 实现 `mmap`：找到进程地址空间中未使用的区域，用于映射文件，并将 VMA 添加到进程的映射区域表中。VMA 应包含指向要映射文件的 `struct file` 的指针。确保在 `mmap` 中增加文件的引用计数，以防止文件在关闭时被删除。
+
 - 下面将在 `kernel/sysfile.c` 中实现系统调用 `sys_mmap()`：
   ```c
    uint64 
@@ -3022,7 +3147,9 @@ sys_open(void)
    return p->vma[idx].addr;  // 这里要返回以前的p->sz
    }
   ```
+
 6. 实现 `munmap`： 找到要取消映射的地址范围的 VMA，并取消映射指定的页面。如果 `munmap` 移除了前一个 `mmap` 的所有页面，则应减少相应的 `struct file` 的引用计数。如果一个页面被修改且文件是 `MAP_SHARED` 映射，则将修改的页面写回文件。
+
 - 在 `kernel/sysfile.c` 中实现 `sys_munmap()` 系统调用，用于取消部分内存的映射。
   ```c
    uint64 
@@ -3062,7 +3189,9 @@ sys_open(void)
    return 0;
    }
   ```
+
 7. 由于 mmap 使用了懒分配机制，我们需要在 `kernel/trap.c` 中处理由其引起的 Load page fault。分配对应的物理内存，并将文件内容读入，最后将虚拟地址映射到物理地址上。
+
 ```c
 void
 usertrap(void)
@@ -3112,7 +3241,9 @@ usertrap(void)
   ...
 }
 ```
+
 8. 我们不仅仅要在调用 `munmap` 时取消映射，在进程退出时也需要取消，在 `kernel/proc.c` 中修改 `exit` 函数定义：
+
 ```c
 void
 exit(int status)
@@ -3134,7 +3265,9 @@ exit(int status)
   ...
 }
 ```
+
 9. 由于 `mmaptest` 中有 `fork` 测试，故我们需要在 `fork` 子进程时拷贝父进程的 VMA 并增加对文件的引用：
+
 ```c
 int
 fork(void)
@@ -3144,12 +3277,14 @@ fork(void)
   for(int i = 0; i < 16 ;i++)//增加引用
     if(np->vma[i].addr) 
       filedup(np->vma[i].file);
-    
+  
   // Copy user memory from parent to child.
   ...
 }
 ```
+
 10. 在 `vm.c` 中修改 `uvmunmap` 和 `uvmcopy`
+
 ```c
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
@@ -3178,13 +3313,18 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   ...
 }
 ```
+
 11. 程序测试：
+
 - `mmaptest` 测试：
   ![](./assets/Lab%20mmap/mmap.png)
+
 #### 实验中遇到的问题和解决方法
+
 1. `uvmsetdirtywrite()` 函数的编写上，我们希望执行一次页表项的查找和更新操作。`walk` 函数用于查找虚拟地址对应的页表项，然后我们知道 `PTE_D` 标志位用于跟踪页面是否被修改过。在页发生写入操作时，硬件会将此标志位置位，表示页面已被修改。但是我不能仅仅以此作为更新标志，我还必须考虑 `PTE_W` 标志位，它表示页面是否可写。如果页面是只读的，这个标志位将不会被设置。在发生写操作时，如果页面不可写，将会触发页故障并进行相应处理。所以我将它修改成：使用按位或操作将 `PTE_D` 和 `PTE_W` 标志位设置在该页表项中，这将标识此页为脏页并且可写。
 
 #### 实验心得
+
 通过本实验，我深入了解了虚拟内存管理、页表操作以及文件系统的交互，同时也熟悉了在操作系统中实现系统调用的步骤和原理。
 
 我成功实现了 sys_mmap() 系统调用，特别是添加了对映射权限的检查，确保只有可写的文件能够使用 MAP_SHARED 形式映射。在实现中，我使用了 Lazy Allocation 的思想，仅在页面发生缺页异常时才进行实际的物理内存分配和数据读取。
@@ -3194,6 +3334,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 ---
 
 ### Mmap 分支测试样例通过结果
+
 ![](./assets/Lab%20mmap/grade.png)
 
 ---
