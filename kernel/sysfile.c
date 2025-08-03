@@ -286,7 +286,7 @@ create(char *path, short type, short major, short minor)
 uint64
 sys_open(void)
 {
-  char path[MAXPATH];
+  char path[MAXPATH], target[MAXPATH];
   int fd, omode;
   struct file *f;
   struct inode *ip;
@@ -320,6 +320,24 @@ sys_open(void)
     iunlockput(ip);
     end_op();
     return -1;
+  }
+
+  int tag = 0;
+  while (ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)) { // 可跟踪
+    readi(ip, 0, (uint64)target, 0, MAXPATH); // 读取target
+    iunlockput(ip);
+
+    if (++tag > 10) { // 循环查找
+      end_op();
+      return -1;
+    }
+
+    ip = namei(target); // 链接到下一inode
+    if (ip == 0) {
+      end_op();
+      return -1;
+    }
+    ilock(ip);
   }
 
   if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
@@ -482,5 +500,38 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64 
+sys_symlink(void) 
+{
+  char target[MAXPATH], path[MAXPATH];
+  struct inode* ip;
+
+  if (argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0)  // 获取路径
+    return -1;
+
+  begin_op();
+
+  if ((ip = namei(path)) != 0) {  // path下已经存在该符号链接
+    end_op();
+    return -1;
+  }
+
+  ip = create(path, T_SYMLINK, 0, 0);  // 在path下创建一个新的符号链接
+  if (ip == 0) {
+    end_op();
+    return -1;
+  }
+
+  if (writei(ip, 0, (uint64)target, 0, MAXPATH) < 0) {  // 将target写入inode
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ip);  // create会返回一个锁定的inode，故要记得解锁
+  end_op();
   return 0;
 }

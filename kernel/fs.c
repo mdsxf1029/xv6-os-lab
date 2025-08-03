@@ -380,22 +380,73 @@ bmap(struct inode *ip, uint bn)
   uint addr, *a;
   struct buf *bp;
 
-  if(bn < NDIRECT){
-    if((addr = ip->addrs[bn]) == 0)
-      ip->addrs[bn] = addr = balloc(ip->dev);
+  if(bn < NDIRECT - 1){
+    if ((addr = ip->addrs[bn]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      ip->addrs[bn] = addr;
+    }
     return addr;
   }
-  bn -= NDIRECT;
+  bn -= (NDIRECT - 1);
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0)
-      ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-    bp = bread(ip->dev, addr);
+    if ((addr = ip->addrs[NDIRECT - 1]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      ip->addrs[NDIRECT - 1] = addr;
+    }
+    bp = bread(ip->dev, addr);  // 读间接块
     a = (uint*)bp->data;
     if((addr = a[bn]) == 0){
-      a[bn] = addr = balloc(ip->dev);
-      log_write(bp);
+      addr = balloc(ip->dev);  // 分配数据库
+      if (addr) {
+        a[bn] = addr;
+        log_write(bp);  // 记录修改
+      }
+    }
+    brelse(bp);
+    return addr;
+  }
+
+  bn -= NINDIRECT;
+
+  if (bn < DINDIRECT) {
+    if ((addr = ip->addrs[NDIRECT]) == 0) {  // 判断“双间接”块是否已分配
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      ip->addrs[NDIRECT] = addr;
+    }
+
+    uint an = bn / NINDIRECT;  // 判断是第几个单间接块
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    if ((addr = a[an]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr) {
+        a[an] = addr;  // 将单间接块地址放入双间接块中
+        log_write(bp);
+      }
+      //else return 0;
+    }
+    brelse(bp);
+
+    an = bn % NINDIRECT;  // 取出这个间接块内部的索引
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    if ((addr = a[an]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr) {
+        a[an] = addr;  // 将直接块地址放入单间接块中
+        log_write(bp);
+      }
+      //else return 0;
     }
     brelse(bp);
     return addr;
@@ -410,25 +461,33 @@ void
 itrunc(struct inode *ip)
 {
   int i, j;
-  struct buf *bp;
-  uint *a;
+  struct buf *bp, *ap;
+  uint *a, *b;
 
-  for(i = 0; i < NDIRECT; i++){
+  for(i = 0; i < NDIRECT - 1; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
       ip->addrs[i] = 0;
     }
   }
-
-  if(ip->addrs[NDIRECT]){
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
+   
+  if (ip->addrs[NDIRECT]) {  // 判断双间接块是否存在
+    bp = bread(ip->dev, ip->addrs[NDIRECT]);  // 若存在则读取
     a = (uint*)bp->data;
-    for(j = 0; j < NINDIRECT; j++){
-      if(a[j])
-        bfree(ip->dev, a[j]);
+    for (i = 0; i < NINDIRECT; i++) {
+      if (a[i]) {  // 判断单间接块是否存在
+        ap = bread(ip->dev, a[i]);
+        b = (uint*)ap->data;
+        for (j = 0; j < NINDIRECT; j++) {
+          if (b[j])  // 判断直接块是否存在
+            bfree(ip->dev, b[j]);
+        }
+        brelse(ap);
+        bfree(ip->dev, a[i]);  // 释放单间接块
+      }
     }
     brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
+    bfree(ip->dev, ip->addrs[NDIRECT]);  // 释放双间接块
     ip->addrs[NDIRECT] = 0;
   }
 

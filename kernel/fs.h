@@ -26,7 +26,8 @@ struct superblock {
 
 #define NDIRECT 12
 #define NINDIRECT (BSIZE / sizeof(uint))
-#define MAXFILE (NDIRECT + NINDIRECT)
+#define DINDIRECT (NINDIRECT * NINDIRECT)  //双间接块对应的直接块总数
+#define MAXFILE (NDIRECT + NINDIRECT + DINDIRECT - 1)  //要减去被占用的直接块
 
 // On-disk inode structure
 struct dinode {
