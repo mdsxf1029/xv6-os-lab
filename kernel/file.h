@@ -1,3 +1,9 @@
+#include "sleeplock.h"  // for struct sleeplock
+#include "fs.h"         // for NDIRECT and inode struct
+
+#ifndef _FILE_H_
+#define _FILE_H_
+
 struct file {
   enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
   int ref; // reference count
@@ -38,3 +44,5 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+
+#endif

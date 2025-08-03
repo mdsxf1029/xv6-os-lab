@@ -1,3 +1,8 @@
+#include "file.h"
+
+#ifndef _PROC_H_
+#define _PROC_H_
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -82,6 +87,17 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct VMA {
+  uint64 addr;        // 虚拟内存起始地址 
+  int length;         // 要映射的字节数
+  int prot;           // 页表标志位
+  int flags;          // 是否要写回文件
+  int fd;             // 文件描述符
+  int offset;         // 偏移量(映射文件起始点)
+  struct file* file;  // 文件结构体
+  int free_len;       // 被取消映射的长度
+};
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -105,4 +121,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  struct VMA vma[16];
 };
+
+#endif
